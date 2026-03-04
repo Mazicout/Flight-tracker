@@ -1,0 +1,1142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LIVE FLIGHT TRACKER</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{
+  background:#000;
+  color:#00ff88;
+  font-family:'Space Mono',monospace;
+  overflow:hidden;
+  width:100vw;
+  height:100vh;
+  cursor:none;
+}
+#map{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:1;background:#080c08}
+.leaflet-control-attribution,.leaflet-control-zoom{display:none!important}
+.leaflet-tile-pane{filter:brightness(0.9) saturate(0.4) sepia(0.1) hue-rotate(60deg)}
+
+/* ── News Ticker ── */
+.news-bar{position:fixed;top:0;left:0;width:100%;height:28px;background:rgba(0,8,4,0.92);border-bottom:1px solid #00ff8825;z-index:1100;overflow:hidden;display:flex;align-items:center}
+.news-label{background:#00ff88;color:#000;font-size:9px;font-weight:700;padding:2px 8px;letter-spacing:2px;flex-shrink:0;text-transform:uppercase;font-family:'Orbitron',sans-serif}
+.news-scroll{flex:1;overflow:hidden;height:28px;display:flex;align-items:center;margin-left:10px}
+.news-text{white-space:nowrap;animation:scrollNews 120s linear infinite;font-size:10px;color:#00ff88aa;letter-spacing:1px}
+.news-text span{margin-right:60px;color:#00ff88bb}
+.news-text .sep{color:#00ff8833;margin:0 20px}
+@keyframes scrollNews{0%{transform:translateX(100vw)}100%{transform:translateX(-100%)}}
+
+/* ── Overlays ── */
+.ov{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none}
+.scanlines{z-index:800;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,136,0.006) 2px,rgba(0,255,136,0.006) 4px)}
+.vig{z-index:799;background:radial-gradient(ellipse at center,transparent 45%,rgba(0,0,0,0.55) 100%)}
+
+/* ── HUD ── */
+.h{position:fixed;z-index:900;pointer-events:none}
+.htl{top:42px;left:14px}
+.htr{top:42px;right:14px;text-align:right}
+.hbl{bottom:14px;left:14px;max-width:300px}
+.hbr{bottom:14px;right:14px;text-align:right}
+.hbc{bottom:10px;left:50%;transform:translateX(-50%);text-align:center}
+
+.dl{font-size:9px;color:#00ff8840;letter-spacing:2px;text-transform:uppercase;margin-bottom:1px}
+.dv{font-size:12px;color:#00ff88;text-shadow:0 0 8px rgba(0,255,136,0.25);margin-bottom:7px}
+.dv.lg{font-family:'Orbitron',sans-serif;font-size:18px;font-weight:700}
+.dv.tm{font-family:'Orbitron',sans-serif;font-size:24px;font-weight:700;letter-spacing:2px}
+
+.ld{display:inline-block;width:5px;height:5px;background:#00ff88;border-radius:50%;margin-right:5px;box-shadow:0 0 6px #00ff88;animation:pd 1.5s ease-in-out infinite}
+.ld.off{background:#ff4444;box-shadow:0 0 6px #ff4444;animation:none}
+
+.fl{margin-top:4px;font-size:9px}
+.fe{color:#00ff88aa;padding:2px 0;border-bottom:1px solid #00ff8808;display:flex;justify-content:space-between;gap:6px;white-space:nowrap}
+.fe .cs{color:#00ffcc;font-weight:bold;min-width:60px}
+.fe .nf{color:#00ff8855}
+.fe .al{color:#00aaff77;font-size:8px}
+
+.sl{font-size:9px;color:#00ff8828;letter-spacing:1px}
+
+/* ── Corner Brackets ── */
+.cb{position:fixed;z-index:900;pointer-events:none}
+.cb.tl{top:34px;left:6px;border-top:1px solid #00ff8818;border-left:1px solid #00ff8818;width:24px;height:24px}
+.cb.tr{top:34px;right:6px;border-top:1px solid #00ff8818;border-right:1px solid #00ff8818;width:24px;height:24px}
+.cb.bl{bottom:6px;left:6px;border-bottom:1px solid #00ff8818;border-left:1px solid #00ff8818;width:24px;height:24px}
+.cb.br{bottom:6px;right:6px;border-bottom:1px solid #00ff8818;border-right:1px solid #00ff8818;width:24px;height:24px}
+
+/* ── Plane Popup Modal ── */
+.plane-popup{position:fixed;z-index:1200;display:none;pointer-events:auto}
+.plane-popup.show{display:block}
+.popup-inner{background:rgba(0,8,4,0.96);border:1px solid #00ff8855;width:340px;padding:0;font-size:11px;box-shadow:0 0 40px rgba(0,255,136,0.15),0 0 80px rgba(0,0,0,0.6)}
+.popup-header{display:flex;justify-content:space-between;align-items:center;padding:10px 14px;border-bottom:1px solid #00ff8822;background:rgba(0,255,136,0.04)}
+.popup-header .cs-name{font-family:'Orbitron',sans-serif;font-size:14px;font-weight:700;color:#00ffcc}
+.popup-header .close-btn{color:#00ff8866;cursor:pointer;font-size:18px;pointer-events:auto;padding:0 4px;transition:color 0.2s}
+.popup-header .close-btn:hover{color:#ff4444}
+.popup-img{width:100%;height:120px;object-fit:cover;border-bottom:1px solid #00ff8815;background:#060a06}
+.popup-img-placeholder{width:100%;height:120px;display:flex;align-items:center;justify-content:center;border-bottom:1px solid #00ff8815;background:#060a06}
+.popup-img-placeholder svg{opacity:0.2}
+.popup-grid{display:grid;grid-template-columns:1fr 1fr;gap:1px;padding:10px 14px}
+.popup-field{padding:4px 0}
+.popup-field .pf-label{font-size:8px;color:#00ff8840;letter-spacing:2px;text-transform:uppercase}
+.popup-field .pf-value{font-size:12px;color:#00ff88;margin-top:1px}
+.popup-field.wide{grid-column:1/-1}
+.popup-trail-info{padding:8px 14px;border-top:1px solid #00ff8815;font-size:9px;color:#00ff8844;letter-spacing:1px}
+
+/* ── Legend ── */
+.legend{position:fixed;bottom:50px;right:14px;z-index:950;pointer-events:none;font-size:8px;letter-spacing:1px}
+.legend-item{display:flex;align-items:center;gap:5px;margin-bottom:3px;color:#00ff8855}
+.legend-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+
+/* ── Feedback Button ── */
+.feedback-btn{position:fixed;top:42px;left:14px;z-index:1000;pointer-events:auto;background:rgba(0,8,4,0.9);border:1px solid #00ff8830;color:#00ff8888;font-family:'Space Mono',monospace;font-size:9px;padding:4px 14px;cursor:pointer;letter-spacing:2px;transition:all 0.3s}
+.feedback-btn:hover{border-color:#00ff8888;color:#00ff88;background:rgba(0,255,136,0.08)}
+
+/* ── Feedback Modal ── */
+.fb-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:1500;display:none;align-items:center;justify-content:center}
+.fb-overlay.show{display:flex}
+.fb-box{background:rgba(0,10,5,0.97);border:1px solid #00ff8844;width:400px;padding:20px;pointer-events:auto}
+.fb-box h3{font-family:'Orbitron',sans-serif;font-size:14px;color:#00ff88;margin-bottom:12px;letter-spacing:2px}
+.fb-box input,.fb-box textarea,.fb-box select{width:100%;background:#0a0f0a;border:1px solid #00ff8822;color:#00ff88;font-family:'Space Mono',monospace;font-size:11px;padding:8px;margin-bottom:10px;outline:none;transition:border-color 0.2s}
+.fb-box input:focus,.fb-box textarea:focus{border-color:#00ff8866}
+.fb-box textarea{height:80px;resize:vertical}
+.fb-box label{font-size:9px;color:#00ff8855;letter-spacing:2px;display:block;margin-bottom:3px}
+.fb-box .fb-btns{display:flex;gap:10px;margin-top:6px}
+.fb-box button{background:rgba(0,255,136,0.1);border:1px solid #00ff8844;color:#00ff88;font-family:'Space Mono',monospace;font-size:10px;padding:8px 16px;cursor:pointer;letter-spacing:2px;transition:all 0.2s;flex:1}
+.fb-box button:hover{background:rgba(0,255,136,0.2);border-color:#00ff88}
+.fb-box button.cancel{color:#00ff8844;border-color:#00ff8822}
+.fb-box button.cancel:hover{color:#ff6666;border-color:#ff666644}
+.fb-box .fb-sent{text-align:center;padding:20px;color:#00ff88;font-size:12px;letter-spacing:2px}
+
+/* ── War Zone Leaflet Styles ── */
+.war-zone-label{background:none!important;border:none!important;box-shadow:none!important;font-family:'Space Mono',monospace;font-size:8px;color:#ff444466;letter-spacing:2px;text-transform:uppercase;font-weight:700;white-space:nowrap}
+.restricted-label{background:none!important;border:none!important;box-shadow:none!important;font-family:'Space Mono',monospace;font-size:7px;color:#ff880044;letter-spacing:1px;white-space:nowrap}
+
+.lp{margin-top:8px;padding-top:4px;border-top:1px solid #00ff8810;max-height:55px;overflow:hidden}
+.ll{font-size:8px;color:#00ff8828;letter-spacing:0.5px;line-height:1.5}
+
+/* ── Boot ── */
+.bs{position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:2000;display:flex;flex-direction:column;justify-content:center;align-items:center;transition:opacity 0.5s}
+.bs.hide{opacity:0;pointer-events:none}
+.bl{font-size:11px;color:#00ff88;opacity:0;margin:2px 0;letter-spacing:2px}
+.bl.v{opacity:1}.bl.d{color:#00ff8840}
+
+/* ── Custom Cursor ── */
+.cursor-circle{
+  position:fixed;
+  width:14px;
+  height:14px;
+  border:2px solid #00ff88;
+  border-radius:50%;
+  pointer-events:none;
+  z-index:2001;
+  transform:translate(-50%,-50%);
+  box-shadow:0 0 8px rgba(0,255,136,0.5);
+}
+
+/* ── Flight Search ── */
+.flight-search{
+  position:fixed;
+  top:42px;
+  right:50%;
+  transform:translateX(50%);
+  z-index:1000;
+  pointer-events:auto;
+}
+.flight-search input{
+  background:rgba(0,8,4,0.9);
+  border:1px solid #00ff8830;
+  color:#00ff88;
+  font-family:'Space Mono',monospace;
+  font-size:9px;
+  padding:4px 10px;
+  letter-spacing:2px;
+  text-transform:uppercase;
+  width:220px;
+  outline:none;
+  transition:border-color 0.2s,box-shadow 0.2s;
+}
+.flight-search input:focus{
+  border-color:#00ff88aa;
+  box-shadow:0 0 12px rgba(0,255,136,0.35);
+}
+
+/* ── Mode Switch (LOCAL / GLOBAL / MOST TRACKED) ── */
+.mode-switch{
+  position:fixed;
+  top:42px;
+  right:14px;
+  z-index:1000;
+  pointer-events:auto;
+  display:flex;
+  gap:4px;
+}
+.mode-switch button{
+  background:rgba(0,8,4,0.9);
+  border:1px solid #00ff8830;
+  color:#00ff8888;
+  font-family:'Space Mono',monospace;
+  font-size:8px;
+  padding:3px 8px;
+  letter-spacing:1px;
+  cursor:pointer;
+  text-transform:uppercase;
+  transition:all 0.2s;
+}
+.mode-switch button.active{
+  border-color:#00ff88aa;
+  color:#00ff88;
+  background:rgba(0,255,136,0.15);
+}
+.mode-switch button:hover{
+  border-color:#00ff88aa;
+  color:#00ff88;
+}
+
+/* ── Loader (0–100%) ── */
+.loader-overlay{
+  position:fixed;
+  top:0;left:0;width:100%;height:100%;
+  background:rgba(0,0,0,0.88);
+  z-index:1900;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  opacity:0;
+  pointer-events:none;
+  transition:opacity 0.3s;
+}
+.loader-overlay.show{
+  opacity:1;
+  pointer-events:auto;
+}
+.loader-box{
+  width:260px;
+  padding:18px 20px 14px;
+  background:rgba(0,10,5,0.96);
+  border:1px solid #00ff8844;
+  box-shadow:0 0 25px rgba(0,255,136,0.25);
+  text-align:center;
+}
+.loader-title{
+  font-family:'Orbitron',sans-serif;
+  font-size:11px;
+  letter-spacing:2px;
+  color:#00ff88;
+  margin-bottom:10px;
+}
+.loader-bar{
+  width:100%;
+  height:8px;
+  background:#001c10;
+  border:1px solid #00ff8830;
+  overflow:hidden;
+}
+.loader-bar-fill{
+  height:100%;
+  width:0%;
+  background:linear-gradient(90deg,#00ff88,#00ccff);
+  box-shadow:0 0 10px rgba(0,255,136,0.7);
+  transition:width 0.15s linear;
+}
+.loader-pct{
+  margin-top:6px;
+  font-size:10px;
+  letter-spacing:2px;
+  color:#00ff8866;
+}
+
+@keyframes pd{0%,100%{opacity:1}50%{opacity:0.3}}
+</style>
+</head>
+<body>
+
+<!-- Boot -->
+<div class="bs" id="boot">
+  <div class="bl" id="b0">[ SYS ] INITIALIZING RADAR v5.0</div>
+  <div class="bl d" id="b1">ADS-B RECEIVER ............. ONLINE</div>
+  <div class="bl d" id="b2">MAP RENDERER ............... OK</div>
+  <div class="bl d" id="b3">FLIGHT API ................. CONNECTING</div>
+  <div class="bl d" id="b4">NEWS FEED .................. SYNCING</div>
+  <div class="bl d" id="b5">CONFLICT ZONES ............. LOADED</div>
+  <div class="bl" id="b6">[ OK ] ALL SYSTEMS LIVE</div>
+</div>
+
+<!-- Loader -->
+<div class="loader-overlay" id="loader">
+  <div class="loader-box">
+    <div class="loader-title" id="loader-title">LOADING AIRCRAFT</div>
+    <div class="loader-bar">
+      <div class="loader-bar-fill" id="loader-bar-fill"></div>
+    </div>
+    <div class="loader-pct" id="loader-pct">0%</div>
+  </div>
+</div>
+
+<!-- News Ticker -->
+<div class="news-bar">
+  <div class="news-label">LIVE</div>
+  <div class="news-scroll"><div class="news-text" id="news-text">▸ LOADING GLOBAL NEWS FEED...</div></div>
+</div>
+
+<div id="map"></div>
+<div class="cursor-circle" id="cursorCircle"></div>
+<div class="ov scanlines"></div>
+<div class="ov vig"></div>
+<div class="cb tl"></div><div class="cb tr"></div><div class="cb bl"></div><div class="cb br"></div>
+
+<!-- Feedback Button -->
+<button class="feedback-btn" id="fbBtn" onclick="document.getElementById('fbModal').classList.add('show')">[ FEEDBACK ]</button>
+
+<!-- Flight Search -->
+<div class="flight-search">
+  <input
+    type="text"
+    id="flightSearchInput"
+    placeholder="SEARCH FLIGHT NO (e.g. QR123)"
+    autocomplete="off"
+  />
+</div>
+
+<!-- Mode Switch -->
+<div class="mode-switch">
+  <button id="btnLocal" class="active">LOCAL</button>
+  <button id="btnGlobal">GLOBAL</button>
+  <button id="btnMostTracked">MOST TRACKED</button>
+</div>
+
+<!-- HUD -->
+<div class="h htl">
+  <div class="dl">LOCAL TIME</div>
+  <div class="dv tm" id="clk">--:--:--</div>
+  <div class="dl">DATE</div>
+  <div class="dv" id="dte">----/--/--</div>
+  <div class="dl" style="margin-top:4px">CENTER</div>
+  <div class="dv" id="pos">---, ---</div>
+</div>
+
+<div class="h htr">
+  <div class="dl">AIRCRAFT</div>
+  <div class="dv lg" id="cnt">---</div>
+  <div class="dl">SOURCE</div>
+  <div class="dv"><span class="ld off" id="ldi"></span><span id="src">CONNECTING</span></div>
+  <div class="dl">UPDATED</div>
+  <div class="dv" id="upd">--:--:--</div>
+</div>
+
+<div class="h hbl">
+  <div class="dl">NEARBY</div>
+  <div class="fl" id="fls"></div>
+  <div class="lp" id="log"></div>
+</div>
+
+<div class="h hbr">
+  <div class="dl">ZOOM</div>
+  <div class="dv" id="zm">--</div>
+  <div class="dl">RADIUS</div>
+  <div class="dv" id="rad">--</div>
+</div>
+
+<!-- Legend -->
+<div class="legend">
+  <div class="legend-item"><div class="legend-dot" style="background:#555"></div>GROUND</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#00ccff"></div>&lt;5K FT</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#00ff88"></div>5-15K FT</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#aaff44"></div>15-30K FT</div>
+  <div class="legend-item"><div class="legend-dot" style="background:#ffaa00"></div>&gt;30K FT</div>
+  <div class="legend-item" style="margin-top:4px"><div class="legend-dot" style="background:rgba(255,50,50,0.25);border:1px solid #ff3232"></div>CONFLICT ZONE</div>
+  <div class="legend-item"><div class="legend-dot" style="background:rgba(255,136,0,0.15);border:1px solid #ff8800"></div>RESTRICTED</div>
+</div>
+
+<div class="h hbc">
+  <div class="sl">▸ SCROLL ZOOM &nbsp; ▸ DRAG PAN &nbsp; ▸ CLICK PLANE &nbsp; ▸ ENTER FLIGHT NO &nbsp; ▸ LOCAL / GLOBAL / MOST TRACKED</div>
+</div>
+
+<!-- Plane Detail Popup -->
+<div class="plane-popup" id="planePopup">
+  <div class="popup-inner" id="popupInner">
+    <div class="popup-header">
+      <span class="cs-name" id="pp-name">---</span>
+      <span class="close-btn" id="pp-close" onclick="closePlanePopup()">✕</span>
+    </div>
+    <div id="pp-img-wrap">
+      <div class="popup-img-placeholder" id="pp-img-ph">
+        <svg width="60" height="60" viewBox="0 0 24 24" fill="#00ff88"><path d="M12 2L14.5 10L22 13V15L14.5 13.5L14 20L17 22V23.5L12 22L7 23.5V22L10 20L9.5 13.5L2 15V13L9.5 10Z"/></svg>
+      </div>
+      <img class="popup-img" id="pp-img" style="display:none" alt="Aircraft">
+    </div>
+    <div class="popup-grid" id="pp-grid">
+      <div class="popup-field"><div class="pf-label">CALLSIGN</div><div class="pf-value" id="pp-cs">---</div></div>
+      <div class="popup-field"><div class="pf-label">ICAO</div><div class="pf-value" id="pp-icao">---</div></div>
+      <div class="popup-field"><div class="pf-label">ALTITUDE</div><div class="pf-value" id="pp-alt">---</div></div>
+      <div class="popup-field"><div class="pf-label">SPEED</div><div class="pf-value" id="pp-spd">---</div></div>
+      <div class="popup-field"><div class="pf-label">HEADING</div><div class="pf-value" id="pp-hdg">---</div></div>
+      <div class="popup-field"><div class="pf-label">VERT RATE</div><div class="pf-value" id="pp-vr">---</div></div>
+      <div class="popup-field"><div class="pf-label">TYPE</div><div class="pf-value" id="pp-type">---</div></div>
+      <div class="popup-field"><div class="pf-label">REGISTRATION</div><div class="pf-value" id="pp-reg">---</div></div>
+      <div class="popup-field wide"><div class="pf-label">COUNTRY / OPERATOR</div><div class="pf-value" id="pp-country">---</div></div>
+      <div class="popup-field wide"><div class="pf-label">POSITION</div><div class="pf-value" id="pp-pos">---</div></div>
+    </div>
+    <div class="popup-trail-info" id="pp-trail">TRACKING TRAIL: --- points</div>
+  </div>
+</div>
+
+<!-- Feedback Modal -->
+<div class="fb-overlay" id="fbModal">
+  <div class="fb-box">
+    <div id="fbForm">
+      <h3>SEND FEEDBACK</h3>
+      <label>YOUR NAME</label>
+      <input type="text" id="fb-name" placeholder="Name (optional)">
+      <label>EMAIL</label>
+      <input type="email" id="fb-email" placeholder="Your email (optional)">
+      <label>RATING</label>
+      <select id="fb-rating">
+        <option value="5">★★★★★ Excellent</option>
+        <option value="4">★★★★☆ Good</option>
+        <option value="3">★★★☆☆ Average</option>
+        <option value="2">★★☆☆☆ Poor</option>
+        <option value="1">★☆☆☆☆ Bad</option>
+      </select>
+      <label>FEEDBACK / SUGGESTIONS</label>
+      <textarea id="fb-msg" placeholder="How can we improve this tracker?"></textarea>
+      <div class="fb-btns">
+        <button class="cancel" onclick="document.getElementById('fbModal').classList.remove('show')">CANCEL</button>
+        <button onclick="sendFeedback()">SEND</button>
+      </div>
+    </div>
+    <div class="fb-sent" id="fbSent" style="display:none">
+      ✓ FEEDBACK SENT<br><br>
+      <span style="font-size:10px;color:#00ff8866">Thank you for helping us improve!</span><br><br>
+      <button onclick="document.getElementById('fbModal').classList.remove('show');document.getElementById('fbForm').style.display='block';document.getElementById('fbSent').style.display='none'">CLOSE</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function(){
+if(typeof L==='undefined'){
+  document.body.innerHTML='<div style="color:#ff4444;font-family:monospace;padding:40px">[ERR] Leaflet not loaded.</div>';return;
+}
+
+/* ══════════ LOG ══════════ */
+var logEl=document.getElementById('log'),logA=[];
+function log(m){
+  var t=new Date();
+  var ts=String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0')+':'+String(t.getSeconds()).padStart(2,'0');
+  logA.unshift('['+ts+'] '+m);
+  if(logA.length>4)logA.length=4;
+  var h='';for(var i=0;i<logA.length;i++)h+='<div class="ll">'+logA[i]+'</div>';
+  logEl.innerHTML=h;
+}
+
+/* ══════════ CUSTOM CURSOR ══════════ */
+var cursorCircle=document.getElementById('cursorCircle');
+document.addEventListener('mousemove',function(e){
+  cursorCircle.style.left=e.clientX+'px';
+  cursorCircle.style.top=e.clientY+'px';
+});
+document.addEventListener('mouseleave',function(){cursorCircle.style.opacity='0';});
+document.addEventListener('mouseenter',function(){cursorCircle.style.opacity='1';});
+
+/* ══════════ LOADER (0–100%) ══════════ */
+var loader=document.getElementById('loader');
+var loaderTitle=document.getElementById('loader-title');
+var loaderBarFill=document.getElementById('loader-bar-fill');
+var loaderPct=document.getElementById('loader-pct');
+var loaderProgress=0;
+var loaderTimer=null;
+var showLoaderNextFetch=true;
+
+function startLoader(label){
+  if(!loader)return;
+  loaderTitle.textContent=label||'LOADING AIRCRAFT';
+  loaderProgress=0;
+  loaderBarFill.style.width='0%';
+  loaderPct.textContent='0%';
+  loader.classList.add('show');
+  if(loaderTimer)clearInterval(loaderTimer);
+  loaderTimer=setInterval(function(){
+    if(loaderProgress<90){
+      loaderProgress+=1;
+      loaderBarFill.style.width=loaderProgress+'%';
+      loaderPct.textContent=loaderProgress+'%';
+    }
+  },70);
+}
+
+function completeLoader(){
+  if(!loader)return;
+  if(loaderTimer)clearInterval(loaderTimer);
+  loaderProgress=100;
+  loaderBarFill.style.width='100%';
+  loaderPct.textContent='100%';
+  setTimeout(function(){
+    loader.classList.remove('show');
+  },300);
+}
+
+/* ══════════ MODE (LOCAL / GLOBAL) ══════════ */
+var MODE='LOCAL'; // 'LOCAL' or 'GLOBAL'
+var btnLocal=document.getElementById('btnLocal');
+var btnGlobal=document.getElementById('btnGlobal');
+var btnMostTracked=document.getElementById('btnMostTracked');
+
+function setMode(m){
+  if(m===MODE)return;
+  MODE=m;
+  if(btnLocal&&btnGlobal){
+    btnLocal.classList.toggle('active',MODE==='LOCAL');
+    btnGlobal.classList.toggle('active',MODE==='GLOBAL');
+  }
+  log('MODE: '+MODE);
+  showLoaderNextFetch=true;
+  fetchFlights();
+}
+
+if(btnLocal) btnLocal.onclick=function(){setMode('LOCAL');};
+if(btnGlobal) btnGlobal.onclick=function(){setMode('GLOBAL');};
+
+/* ══════════ BOOT ══════════ */
+var bids=['b0','b1','b2','b3','b4','b5','b6'];
+for(var i=0;i<bids.length;i++)(function(id,d){setTimeout(function(){document.getElementById(id).classList.add('v');},d);})(bids[i],150+i*250);
+setTimeout(function(){document.getElementById('boot').classList.add('hide');},150+bids.length*250+400);
+
+/* ══════════ MAP ══════════ */
+var LAT=23.8103,LON=90.4125,ZOOM=7,TICK=12000;
+var map=L.map('map',{center:[LAT,LON],zoom:ZOOM,zoomControl:false,attributionControl:false,preferCanvas:true,minZoom:3,maxZoom:13});
+L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19,subdomains:'abcd'}).addTo(map);
+log('MAP OK');
+
+/* ══════════ GEOLOCATION ══════════ */
+if(navigator.geolocation){
+  navigator.geolocation.getCurrentPosition(function(p){
+    LAT=p.coords.latitude;LON=p.coords.longitude;
+    map.setView([LAT,LON],ZOOM);
+    log('GEO: '+LAT.toFixed(2)+','+LON.toFixed(2));
+  },function(){log('GEO DENIED');},{timeout:4000});
+}
+
+/* ══════════ WAR / CONFLICT ZONES (CIRCLES) ══════════ */
+var conflictZones=[
+  {name:'UKRAINE',center:[48.0,31.0],radiusNm:300},
+  {name:'GAZA',center:[31.4,34.4],radiusNm:80},
+  {name:'SUDAN',center:[15.6,30.2],radiusNm:300},
+  {name:'MYANMAR',center:[18.5,96.7],radiusNm:280},
+  {name:'SYRIA',center:[34.8,39.0],radiusNm:160},
+  {name:'YEMEN',center:[15.5,48.5],radiusNm:260},
+  {name:'SOMALIA',center:[6.0,46.2],radiusNm:260},
+  {name:'D.R. CONGO',center:[0.2,21.8],radiusNm:320}
+];
+
+function addConflictZoneWave(z){
+  var baseRadius=z.radiusNm*1852;
+
+  // Filled core area
+  var core=L.circle(z.center,{
+    radius:baseRadius,
+    color:'#ff3232',
+    weight:1,
+    opacity:0.35,
+    fillColor:'#ff2222',
+    fillOpacity:0.06,
+    dashArray:'6,4',
+    interactive:false
+  }).addTo(map);
+
+  // Pulsing wave ring
+  var wave=L.circle(z.center,{
+    radius:baseRadius*0.7,
+    color:'#ff5555',
+    weight:1,
+    opacity:0.6,
+    fill:false,
+    dashArray:'4,8',
+    interactive:false
+  }).addTo(map);
+
+  var dir=1;
+  var minR=baseRadius*0.7;
+  var maxR=baseRadius*1.4;
+  setInterval(function(){
+    var r=wave.getRadius();
+    if(r>=maxR)dir=-1;
+    if(r<=minR)dir=1;
+    wave.setRadius(r+dir*6000); // adjust 6000 for faster/slower wave
+    wave.setStyle({opacity:dir>0?0.8:0.2});
+  },150);
+
+  L.marker(core.getLatLng(),{
+    icon:L.divIcon({
+      className:'war-zone-label',
+      html:'⚠ '+z.name+' CONFLICT',
+      iconSize:[140,16],
+      iconAnchor:[70,8]
+    }),
+    interactive:false
+  }).addTo(map);
+}
+
+conflictZones.forEach(addConflictZoneWave);
+log('CONFLICT ZONES: '+conflictZones.length);
+
+/* ══════════ RESTRICTED AIRSPACE / NO-FLY ZONES (CIRCLES) ══════════ */
+var restrictedZones=[
+  {name:'PYONGYANG FIR',center:[40.2,127.5],radiusNm:220},
+  {name:'TEHRAN TMA',center:[35.5,51.5],radiusNm:90},
+  {name:'AREA 51 / NELLIS',center:[37.3,-115.9],radiusNm:80},
+  {name:'WASHINGTON DC SFRA',center:[38.9,-77.05],radiusNm:45},
+  {name:'SINAI RESTRICTED',center:[29.6,33.7],radiusNm:120},
+  {name:'TRIPOLI FIR',center:[29.1,17.2],radiusNm:240},
+  {name:'CRIMEA RESTRICTED',center:[45.3,34.6],radiusNm:90},
+  {name:'KABUL FIR',center:[33.9,67.8],radiusNm:260},
+  {name:'IRAQ FIR',center:[33.2,43.7],radiusNm:220}
+];
+
+restrictedZones.forEach(function(z){
+  var circle=L.circle(z.center,{
+    radius:z.radiusNm*1852,
+    color:'#ff8800',weight:1,opacity:0.25,fillColor:'#ff8800',fillOpacity:0.04,
+    dashArray:'3,6',interactive:false
+  }).addTo(map);
+  L.marker(circle.getLatLng(),{
+    icon:L.divIcon({className:'restricted-label',html:'✖ '+z.name,iconSize:[120,14],iconAnchor:[60,7]}),
+    interactive:false
+  }).addTo(map);
+});
+log('RESTRICTED ZONES: '+restrictedZones.length);
+
+/* ══════════ PLANES STATE ══════════ */
+var planes=[];
+var trailHistory={};   // icao -> [{lat,lon,time}]
+var trailLines={};     // icao -> L.polyline
+var fetchN=0;
+var MAX_TRAIL=20;
+
+/* ══════════ CANVAS FOR PLANES ══════════ */
+var planeCanvas=document.createElement('canvas');
+planeCanvas.style.cssText='position:absolute;top:0;left:0;width:100%;height:100%;z-index:450;pointer-events:auto;cursor:none';
+document.getElementById('map').appendChild(planeCanvas);
+var ctx=planeCanvas.getContext('2d');
+
+function resizeCanvas(){planeCanvas.width=window.innerWidth;planeCanvas.height=window.innerHeight;}
+resizeCanvas();
+window.addEventListener('resize',function(){resizeCanvas();map.invalidateSize();drawPlanes();});
+
+/* ══════════ ALTITUDE COLOR ══════════ */
+function altColor(alt,onGround){
+  if(onGround)return'#555555';
+  if(alt<5000)return'rgba(0,204,255,0.85)';
+  if(alt<15000)return'rgba(0,255,136,0.85)';
+  if(alt<30000)return'rgba(170,255,68,0.85)';
+  return'rgba(255,170,0,0.85)';
+}
+
+/* ══════════ DRAW PLANES ══════════ */
+function drawPlanes(){
+  ctx.clearRect(0,0,planeCanvas.width,planeCanvas.height);
+  for(var i=0;i<planes.length;i++){
+    var p=planes[i];
+    var pt=map.latLngToContainerPoint([p.lat,p.lon]);
+    if(pt.x<-30||pt.x>planeCanvas.width+30||pt.y<-30||pt.y>planeCanvas.height+30)continue;
+    var hdg=(p.heading||0)*Math.PI/180;
+    var c=altColor(p.alt,p.onGround);
+    var s=map.getZoom()>=9?5:map.getZoom()>=7?4:3;
+
+    ctx.save();
+    ctx.translate(pt.x,pt.y);
+    ctx.rotate(hdg);
+    ctx.beginPath();
+    ctx.moveTo(0,-s*2.2);
+    ctx.lineTo(s*0.4,-s*0.5);ctx.lineTo(s*2,s*0.2);ctx.lineTo(s*2,s*0.6);ctx.lineTo(s*0.4,s*0.3);
+    ctx.lineTo(s*0.3,s*1.5);ctx.lineTo(s*1.1,s*2);ctx.lineTo(s*1.1,s*2.3);ctx.lineTo(s*0.15,s*1.8);
+    ctx.lineTo(0,s*2);
+    ctx.lineTo(-s*0.15,s*1.8);ctx.lineTo(-s*1.1,s*2.3);ctx.lineTo(-s*1.1,s*2);ctx.lineTo(-s*0.3,s*1.5);
+    ctx.lineTo(-s*0.4,s*0.3);ctx.lineTo(-s*2,s*0.6);ctx.lineTo(-s*2,s*0.2);ctx.lineTo(-s*0.4,-s*0.5);
+    ctx.closePath();
+    ctx.fillStyle=c;ctx.fill();
+    ctx.shadowColor=c;ctx.shadowBlur=4;ctx.fill();ctx.shadowBlur=0;
+    ctx.restore();
+  }
+}
+
+/* ══════════ TRAIL LINES (Leaflet polylines) ══════════ */
+function updateTrails(){
+  var z=map.getZoom();
+  var drawTrails=z>=7;
+
+  for(var i=0;i<planes.length;i++){
+    var p=planes[i];
+    if(!p.icao||p.lat==null)continue;
+    if(!trailHistory[p.icao])trailHistory[p.icao]=[];
+    var hist=trailHistory[p.icao];
+    var last=hist.length>0?hist[hist.length-1]:null;
+
+    if(!last||Math.abs(last.lat-p.lat)>0.001||Math.abs(last.lon-p.lon)>0.001){
+      hist.push({lat:p.lat,lon:p.lon,t:Date.now()});
+      if(hist.length>MAX_TRAIL)hist.shift();
+    }
+
+    if(!drawTrails)continue;
+
+    if(hist.length>=2){
+      var pts=hist.map(function(h){return[h.lat,h.lon];});
+      var c=altColor(p.alt,p.onGround);
+      if(trailLines[p.icao]){
+        trailLines[p.icao].setLatLngs(pts);
+        trailLines[p.icao].setStyle({color:c});
+      } else {
+        trailLines[p.icao]=L.polyline(pts,{
+          color:c,weight:1.5,opacity:0.35,dashArray:'4,4',interactive:false
+        }).addTo(map);
+      }
+    }
+  }
+
+  // Clean up stale trails (older than 5 min)
+  var now=Date.now();
+  var activeIcaos={};
+  for(var j=0;j<planes.length;j++)activeIcaos[planes[j].icao]=true;
+  var allKeys=Object.keys(trailHistory);
+  for(var k=0;k<allKeys.length;k++){
+    var key=allKeys[k];
+    if(!activeIcaos[key]){
+      var h=trailHistory[key];
+      if(h.length>0&&now-h[h.length-1].t>300000){
+        if(trailLines[key]){map.removeLayer(trailLines[key]);delete trailLines[key];}
+        delete trailHistory[key];
+      }
+    }
+  }
+}
+
+/* ══════════ PLANE CLICK → POPUP ══════════ */
+var selectedPlane=null;
+
+planeCanvas.addEventListener('click',function(e){
+  var mx=e.clientX,my=e.clientY;
+  var best=null,bestD=900;
+  for(var i=0;i<planes.length;i++){
+    var p=planes[i];
+    var pt=map.latLngToContainerPoint([p.lat,p.lon]);
+    var d=(pt.x-mx)*(pt.x-mx)+(pt.y-my)*(pt.y-my);
+    if(d<bestD){bestD=d;best=p;}
+  }
+  if(best&&bestD<625){
+    selectedPlane=best;
+    showPlanePopup(best,e.clientX,e.clientY);
+  } else {
+    closePlanePopup();
+  }
+});
+
+// Pass through drag/scroll to map
+planeCanvas.addEventListener('mousedown',function(e){
+  if(map.dragging&&map.dragging._draggable){
+    map.dragging._draggable._onDown(e);
+  }
+});
+planeCanvas.addEventListener('wheel',function(e){
+  var delta=e.deltaY>0?-1:1;
+  map.setZoom(map.getZoom()+delta);
+},{passive:true});
+
+function showPlanePopup(p,mx,my){
+  var popup=document.getElementById('planePopup');
+
+  document.getElementById('pp-name').textContent=p.callsign||p.icao.toUpperCase();
+  document.getElementById('pp-cs').textContent=p.callsign||'N/A';
+  document.getElementById('pp-icao').textContent=p.icao.toUpperCase();
+  document.getElementById('pp-alt').textContent=p.onGround?'GROUND':(p.alt.toLocaleString()+' ft');
+  document.getElementById('pp-spd').textContent=Math.round(p.speed)+' kts';
+  document.getElementById('pp-hdg').textContent=Math.round(p.heading)+'\u00b0';
+  document.getElementById('pp-vr').textContent=(p.vrate>0?'+':'')+Math.round(p.vrate||0)+' ft/min';
+  document.getElementById('pp-type').textContent=p.type||'Unknown';
+  document.getElementById('pp-reg').textContent=p.reg||'N/A';
+  document.getElementById('pp-country').textContent=p.country||p.reg||'Unknown';
+  document.getElementById('pp-pos').textContent=p.lat.toFixed(4)+', '+p.lon.toFixed(4);
+
+  var trail=trailHistory[p.icao];
+  document.getElementById('pp-trail').textContent='TRACKING TRAIL: '+(trail?trail.length:0)+' points';
+
+  var img=document.getElementById('pp-img');
+  var ph=document.getElementById('pp-img-ph');
+  img.style.display='none';
+  ph.style.display='flex';
+  if(p.icao){
+    var imgUrl='https://api.planespotters.net/pub/photos/hex/'+p.icao.toUpperCase();
+    fetch(imgUrl).then(function(r){return r.json();}).then(function(d){
+      if(d.photos&&d.photos.length>0){
+        img.src=d.photos[0].thumbnail_large?d.photos[0].thumbnail_large.src:d.photos[0].thumbnail.src;
+        img.style.display='block';
+        ph.style.display='none';
+      }
+    }).catch(function(){});
+  }
+
+  var x=mx+20,y=my-60;
+  if(x+360>window.innerWidth)x=mx-360;
+  if(y+400>window.innerHeight)y=window.innerHeight-420;
+  if(y<36)y=36;
+  popup.style.left=x+'px';
+  popup.style.top=y+'px';
+  popup.classList.add('show');
+}
+
+window.closePlanePopup=function(){
+  document.getElementById('planePopup').classList.remove('show');
+  selectedPlane=null;
+};
+
+/* ══════════ FEEDBACK ══════════ */
+window.sendFeedback=function(){
+  var name=document.getElementById('fb-name').value;
+  var email=document.getElementById('fb-email').value;
+  var rating=document.getElementById('fb-rating').value;
+  var msg=document.getElementById('fb-msg').value;
+
+  if(!msg.trim()){alert('Please enter your feedback.');return;}
+
+  var body='Flight Tracker Feedback%0A%0A'+
+    'Name: '+(name||'Anonymous')+'%0A'+
+    'Email: '+(email||'N/A')+'%0A'+
+    'Rating: '+rating+'/5%0A%0A'+
+    'Message:%0A'+encodeURIComponent(msg)+'%0A%0A'+
+    'Sent: '+new Date().toISOString();
+
+  fetch('/api/feedback',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({name:name,email:email,rating:rating,message:msg,time:new Date().toISOString()})
+  }).catch(function(){});
+
+  var mailto='mailto:fk575987@gmail.com?subject=Flight%20Tracker%20Feedback%20('+rating+'/5)&body='+body;
+  window.open(mailto,'_blank');
+
+  document.getElementById('fbForm').style.display='none';
+  document.getElementById('fbSent').style.display='block';
+};
+
+/* ══════════ NEWS TICKER ══════════ */
+function fetchNews(){
+  fetch('/api/news').then(function(r){return r.json();}).then(function(d){
+    if(d.items&&d.items.length>0)renderNews(d.items);
+  }).catch(function(){
+    renderNews([
+      {title:'Live global flight tracking active — monitoring '+planes.length+' aircraft'},
+      {title:'Conflict zones highlighted: Ukraine, Gaza, Sudan, Myanmar, Syria, Yemen'},
+      {title:'Restricted airspace zones displayed on map — exercise caution'},
+      {title:'ADS-B data refreshing every 12 seconds from adsb.lol network'},
+      {title:'Click any aircraft for detailed information and tracking history'}
+    ]);
+  });
+}
+
+function renderNews(items){
+  var html='';
+  for(var i=0;i<items.length;i++){
+    html+='<span>▸ '+items[i].title.toUpperCase()+'</span>';
+    if(i<items.length-1)html+='<span class="sep">│</span>';
+  }
+  document.getElementById('news-text').innerHTML=html;
+}
+
+setTimeout(fetchNews,4000);
+setInterval(fetchNews,300000);
+
+/* ══════════ FETCH FLIGHTS (LOCAL / GLOBAL) ══════════ */
+function fetchFlights(){
+  var c=map.getCenter();
+  var z=map.getZoom();
+
+  if(showLoaderNextFetch){
+    startLoader(MODE==='GLOBAL'?'LOADING GLOBAL AIRCRAFT':'LOADING LOCAL AIRCRAFT');
+    showLoaderNextFetch=false;
+  }
+
+  if(MODE==='GLOBAL'){
+    document.getElementById('rad').textContent='GLOBAL';
+    var osUrl='https://opensky-network.org/api/states/all';
+    log('PULL GLOBAL (OpenSky)');
+    tryFetchOpenSky(osUrl,'OPENSKY GLOBAL');
+    return;
+  }
+
+  var dist=z>=11?60:z>=9?150:z>=7?300:500;
+  document.getElementById('rad').textContent=dist+' NM';
+  var proxyUrl='/api/flights?lat='+c.lat.toFixed(4)+'&lon='+c.lng.toFixed(4)+'&dist='+dist;
+  var directUrl=ADSB_BASE+'/v2/lat/'+c.lat.toFixed(4)+'/lon/'+c.lng.toFixed(4)+'/dist/'+dist;
+
+  log('PULL r='+dist+'NM');
+
+  tryFetch(proxyUrl,function(ok){
+    if(!ok){
+      log('PROXY N/A - DIRECT');
+      tryFetch(directUrl,function(ok2){
+        if(!ok2){
+          var b=map.getBounds();
+          var osUrl='https://opensky-network.org/api/states/all?lamin='+b.getSouth().toFixed(2)+
+            '&lomin='+b.getWest().toFixed(2)+'&lamax='+b.getNorth().toFixed(2)+'&lomax='+b.getEast().toFixed(2);
+          tryFetchOpenSky(osUrl,'OPENSKY LOCAL');
+        }
+      });
+    }
+  });
+}
+
+function tryFetch(url,cb){
+  fetch(url).then(function(r){
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    return r.json();
+  }).then(function(data){
+    fetchN++;
+    var ac=data.ac||data.aircraft||[];
+    if(ac.length>0){processAdsbLol(ac);cb(true);}
+    else if(data.states){processOpenSky(data.states,'OPENSKY');cb(true);}
+    else cb(false);
+  }).catch(function(){cb(false);});
+}
+
+function tryFetchOpenSky(url,label){
+  fetch(url).then(function(r){
+    if(!r.ok)throw new Error('');return r.json();
+  }).then(function(data){
+    fetchN++;
+    if(data.states)processOpenSky(data.states,label);else setOffline();
+  }).catch(function(){setOffline();});
+}
+
+function setOffline(){
+  if(MODE==='GLOBAL'){
+    // In GLOBAL mode, don't flip UI to OFFLINE; just log
+    log('GLOBAL SOURCE UNAVAILABLE - KEEPING LAST DATA');
+    completeLoader();
+    return;
+  }
+  document.getElementById('ldi').className='ld off';
+  document.getElementById('src').textContent='OFFLINE';
+  completeLoader();
+}
+
+function processAdsbLol(ac){
+  planes=[];
+  for(var i=0;i<ac.length;i++){
+    var a=ac[i];
+    if(a.lat==null||a.lon==null)continue;
+    var isGnd=a.alt_baro==='ground'||a.on_ground===true;
+    planes.push({
+      icao:(a.hex||a.icao||'').toLowerCase(),
+      callsign:(a.flight||a.call||a.callsign||'').trim(),
+      lat:a.lat,lon:a.lon,
+      alt:isGnd?0:(typeof a.alt_baro==='number'?a.alt_baro:(a.alt_geom||0)),
+      heading:a.track||a.true_heading||0,
+      speed:a.gs||a.ground_speed||0,
+      vrate:a.baro_rate||a.vert_rate||0,
+      onGround:isGnd,
+      type:a.t||a.desc||'',
+      reg:a.r||'',
+      country:a.ownOp||a.r||''
+    });
+  }
+  setLive('Server is ',planes.length);
+  drawPlanes();updateTrails();updateNearby();updatePopupIfOpen();
+  completeLoader();
+}
+
+function processOpenSky(states,label){
+  planes=[];
+  for(var i=0;i<states.length;i++){
+    var s=states[i];
+    if(s[5]==null||s[6]==null)continue;
+    planes.push({
+      icao:s[0],callsign:(s[1]||'').trim(),
+      lat:s[6],lon:s[5],
+      alt:Math.round((s[7]||s[13]||0)*3.281),
+      heading:s[10]||0,
+      speed:Math.round((s[9]||0)*1.944),
+      vrate:Math.round((s[11]||0)*196.85),
+      onGround:s[8],type:'',reg:'',country:s[2]||''
+    });
+  }
+
+  if(planes.length>3000){
+    planes=planes.slice(0,3000);
+  }
+
+  setLive(label||'OPENSKY',planes.length);
+  drawPlanes();updateTrails();updateNearby();updatePopupIfOpen();
+  completeLoader();
+}
+
+function setLive(src,n){
+  document.getElementById('cnt').textContent=n.toLocaleString();
+  document.getElementById('ldi').className='ld';
+  document.getElementById('src').textContent=src+' LIVE';
+  var t=new Date();
+  document.getElementById('upd').textContent=String(t.getHours()).padStart(2,'0')+':'+String(t.getMinutes()).padStart(2,'0')+':'+String(t.getSeconds()).padStart(2,'0');
+  log('RX '+n+' AC ['+src+'] #'+fetchN);
+}
+
+function updatePopupIfOpen(){
+  if(!selectedPlane)return;
+  for(var i=0;i<planes.length;i++){
+    if(planes[i].icao===selectedPlane.icao){
+      selectedPlane=planes[i];
+      document.getElementById('pp-alt').textContent=planes[i].onGround?'GROUND':(planes[i].alt.toLocaleString()+' ft');
+      document.getElementById('pp-spd').textContent=Math.round(planes[i].speed)+' kts';
+      document.getElementById('pp-hdg').textContent=Math.round(planes[i].heading)+'\u00b0';
+      document.getElementById('pp-vr').textContent=(planes[i].vrate>0?'+':'')+Math.round(planes[i].vrate||0)+' ft/min';
+      document.getElementById('pp-pos').textContent=planes[i].lat.toFixed(4)+', '+planes[i].lon.toFixed(4);
+      var trail=trailHistory[planes[i].icao];
+      document.getElementById('pp-trail').textContent='TRACKING TRAIL: '+(trail?trail.length:0)+' points';
+      break;
+    }
+  }
+}
+
+/* ══════════ NEARBY ══════════ */
+function updateNearby(){
+  var c=map.getCenter();var items=[];
+  for(var i=0;i<planes.length;i++){
+    var p=planes[i];
+    if(p.lat==null)continue;
+    items.push({p:p,d:(p.lat-c.lat)*(p.lat-c.lat)+(p.lon-c.lng)*(p.lon-c.lng)});
+  }
+  items.sort(function(a,b){return a.d-b.d;});
+  items=items.slice(0,6);
+  var el=document.getElementById('fls');
+  if(!items.length){el.innerHTML='<div class="fe"><span class="nf">NO DATA</span></div>';return;}
+  var h='';
+  for(var j=0;j<items.length;j++){
+    var p=items[j].p;
+    var cs=p.callsign||p.icao.toUpperCase().slice(0,6);
+    var al=p.onGround?'GND':('FL'+Math.round(p.alt/100));
+    h+='<div class="fe"><span class="cs">'+cs+'</span><span class="nf">'+Math.round(p.heading)+'\u00b0 '+Math.round(p.speed)+'kt</span><span class="al">'+al+'</span></div>';
+  }
+  el.innerHTML=h;
+}
+
+/* ══════════ MOST TRACKED (LONGEST TRAIL) ══════════ */
+function jumpToMostTracked(){
+  var bestPlane=null;
+  var bestLen=-1;
+  var keys=Object.keys(trailHistory);
+
+  for(var i=0;i<keys.length;i++){
+    var icao=keys[i];
+    var hist=trailHistory[icao];
+    if(!hist||hist.length===0)continue;
+    var len=hist.length;
+    if(len>bestLen){
+      for(var j=0;j<planes.length;j++){
+        if(planes[j].icao===icao){
+          bestLen=len;
+          bestPlane=planes[j];
+          break;
+        }
+      }
+    }
+  }
+
+  if(!bestPlane&&planes.length){
+    bestPlane=planes[0];
+  }
+
+  if(bestPlane){
+    focusFlight(bestPlane);
+    log('MOST TRACKED: '+(bestPlane.callsign||bestPlane.icao.toUpperCase())+' ['+ (bestLen>0?bestLen:1) +' pts]');
+  }else{
+    log('MOST TRACKED: NONE');
+  }
+}
+
+if(btnMostTracked){
+  btnMostTracked.onclick=function(){
+    jumpToMostTracked();
+  };
+}
+
+/* ══════════ FLIGHT SEARCH BY CALLSIGN ══════════ */
+function findFlightByCallsign(query){
+  if(!query)return null;
+  query=query.trim().toUpperCase();
+
+  var best=null;
+  for(var i=0;i<planes.length;i++){
+    var p=planes[i];
+    var cs=(p.callsign||'').toUpperCase();
+
+    if(cs===query){
+      return p;
+    }
+
+    if(!best&&cs.indexOf(query)!==-1){
+      best=p;
+    }
+
+    if(!best&&p.icao&&p.icao.toUpperCase()===query){
+      best=p;
+    }
+  }
+  return best;
+}
+
+function focusFlight(p){
+  if(!p)return;
+  var latlng=[p.lat,p.lon];
+  map.setView(latlng,Math.max(map.getZoom(),8));
+  if(typeof showPlanePopup==='function'){
+    showPlanePopup(p,window.innerWidth/2,window.innerHeight/2);
+  }
+}
+
+var fsInput=document.getElementById('flightSearchInput');
+if(fsInput){
+  fsInput.addEventListener('keydown',function(e){
+    if(e.key==='Enter'){
+      var p=findFlightByCallsign(fsInput.value);
+      if(p){
+        focusFlight(p);
+        log('SEARCH HIT: '+(p.callsign||p.icao.toUpperCase()));
+      }else{
+        log('SEARCH MISS: '+fsInput.value.toUpperCase());
+      }
+    }
+  });
+}
+
+/* ══════════ CLOCK ══════════ */
+function tick(){
+  var n=new Date();
+  document.getElementById('clk').textContent=String(n.getHours()).padStart(2,'0')+':'+String(n.getMinutes()).padStart(2,'0')+':'+String(n.getSeconds()).padStart(2,'0');
+  document.getElementById('dte').textContent=n.getFullYear()+'/'+String(n.getMonth()+1).padStart(2,'0')+'/'+String(n.getDate()).padStart(2,'0');
+}
+setInterval(tick,1000);tick();
+
+/* ══════════ MAP INFO ══════════ */
+function mapInfo(){
+  document.getElementById('zm').textContent='Z'+map.getZoom();
+  var c=map.getCenter();
+  document.getElementById('pos').textContent=c.lat.toFixed(4)+', '+c.lng.toFixed(4);
+}
+map.on('zoomend moveend',function(){mapInfo();drawPlanes();});
+mapInfo();
+
+/* ══════════ MAP MOVE → REFETCH ══════════ */
+var ft=null;
+map.on('moveend zoomend',function(){
+  clearTimeout(ft);
+  ft=setTimeout(fetchFlights,1200);
+});
+map.on('move zoom',drawPlanes);
+
+/* ══════════ START ══════════ */
+setTimeout(function(){log('FIRST PULL...');fetchFlights();},2800);
+setInterval(fetchFlights,TICK);
+
+})();
+</script>
+</body>
+</html>
